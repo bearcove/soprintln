@@ -17,7 +17,7 @@ macro_rules! init {
     () => {
         static INIT: std::sync::Once = std::sync::Once::new();
         INIT.call_once(|| unsafe {
-            SO_NAME = env!("CARGO_PKG_NAME");
+            $crate::SO_NAME = env!("CARGO_PKG_NAME");
         });
     };
 }
