@@ -112,12 +112,19 @@ impl<'a> Beacon<'a> {
     /// Creates a new `Beacon` with the given extra string and value.
     pub fn new(name: &'a str, u: u64) -> Self {
         fn hash(mut x: u64) -> u64 {
-            const K: u64 = 0x517cc1b727220a95;
-            x = x.wrapping_mul(K);
-            x ^= x >> 32;
-            x = x.wrapping_mul(K);
-            x ^= x >> 32;
-            x = x.wrapping_mul(K);
+            const PRIME1: u64 = 11400714785074694791;
+            const PRIME2: u64 = 14029467366897019727;
+            const PRIME3: u64 = 1609587929392839161;
+
+            x = x.wrapping_mul(PRIME1);
+            x = x.rotate_left(31);
+            x = x.wrapping_mul(PRIME2);
+            x ^= x >> 27;
+            x = x.wrapping_mul(PRIME3);
+            x ^= x >> 33;
+            x = x.wrapping_mul(PRIME1);
+            x ^= x >> 28;
+
             x
         }
 
@@ -181,8 +188,10 @@ mod tests {
     #[test]
     fn test_beacon() {
         crate::init!();
-        let b = Beacon::new("test", 0x12345678);
-        println!("{b}");
+        for i in 0..128 {
+            let b = Beacon::new("test", 0x12345678 + i);
+            println!("{b}");
+        }
     }
 
     #[test]
