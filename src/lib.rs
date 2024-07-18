@@ -8,22 +8,13 @@ pub fn shared_object_id() -> u64 {
     &SHARED_OBJECT_ID_REF as *const _ as u64
 }
 
-/// Defined to `I` when importing globals, `E` when exporting globals, and `N` otherwise.
-#[cfg(feature = "import-globals")]
-pub static RUBICON_MODE: &str = "I"; // "import"
-
-/// Defined to `I` when importing globals, `E` when exporting globals, and `N` otherwise.
-#[cfg(feature = "export-globals")]
-pub static RUBICON_MODE: &str = "E"; // "export"
-
-/// Defined to `I` when importing globals, `E` when exporting globals, and `N` otherwise.
-#[cfg(not(any(feature = "import-globals", feature = "export-globals")))]
-pub static RUBICON_MODE: &str = "N"; // "normal"
+/// The name of this package
+pub static PKG_NAME: &str = env!("CARGO_PKG_NAME");
 
 /// Prints a message, prefixed with a cycling millisecond timestamp (wraps at 99999),
 /// a colorized shared object id, a colorized thread name+id, and the given message.
 #[macro_export]
-#[cfg(feature = "soprintln")]
+#[cfg(feature = "print")]
 macro_rules! soprintln {
     ($($arg:tt)*) => {
         {
@@ -31,7 +22,7 @@ macro_rules! soprintln {
             static ENV_CHECKED: std::sync::Once = std::sync::Once::new();
             static SHOULD_PRINT: AtomicBool = AtomicBool::new(false);
             ENV_CHECKED.call_once(|| {
-                let should_print = std::env::var("SO_PRINTLN").map(|v| v == "1").unwrap_or(false);
+                let should_print = std::env::var("SOPRINTLN").map(|v| v == "1").unwrap_or(false);
                 SHOULD_PRINT.store(should_print, Ordering::Relaxed);
             });
 
@@ -39,7 +30,7 @@ macro_rules! soprintln {
                 // this formatting is terribly wasteful — PRs welcome
 
                 let so_id = $crate::shared_object_id();
-                let so_mode_and_id = $crate::Beacon::new($crate::RUBICON_MODE, so_id);
+                let so_mode_and_id = $crate::Beacon::new($crate::PKG_NAME.trim(), so_id);
                 let curr_thread = std::thread::current();
                 let tid = format!("{:?}", curr_thread.id());
                 // strip `ThreadId(` prefix
@@ -49,14 +40,24 @@ macro_rules! soprintln {
                 // parse tid as u64
                 let tid = tid.parse::<u64>().unwrap_or(0);
 
-                let thread_name = curr_thread.name().unwrap_or("<unnamed>");
+                let thread_name = curr_thread.name().unwrap_or("<unnamed>").trim();
                 let thread = $crate::Beacon::new(thread_name, tid);
 
                 let timestamp = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap().as_millis() % 99999;
+
+                // compute the 24-bit ANSI color of the timestamp based on its value between 0 and 99999
+                let hue = (timestamp % 10000) as f64 / 9999.0;
+                let saturation = 50.0;
+                let lightness = 70.0;
+                let (fg_r, fg_g, fg_b) = $crate::hsl_to_rgb(hue, saturation, lightness);
+                let (bg_r, bg_g, bg_b) = $crate::hsl_to_rgb(hue, saturation * 0.8, lightness * 0.5);
+
+                // coloring the timestamp helps spot time gaps in the log
+
                 // FIXME: this is probably not necessary, but without it, rustc complains about
                 // capturing variables in format_args?
                 let msg = format!($($arg)*);
-                eprintln!("{timestamp:05} {so_mode_and_id} {thread} {msg}");
+                eprintln!("\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{:05}\x1b[0m {so_mode_and_id} {thread} {msg}", bg_r, bg_g, bg_b, fg_r, fg_g, fg_b, timestamp);
             }
         }
     };
@@ -66,12 +67,14 @@ macro_rules! soprintln {
 ///
 /// It is costly, which is why it's behind a cargo feature AND an environment variable.
 ///
-/// To see soprintln output, enable the `soprintln` cargo feature, and set the `SO_PRINTLN`
+/// To see soprintln output, enable the `soprintln` cargo feature, and set the `SOPRINTLN`
 /// environment variable to `1`.
 #[macro_export]
-#[cfg(not(feature = "soprintln"))]
+#[cfg(not(feature = "print"))]
 macro_rules! soprintln {
-    ($($arg:tt)*) => {};
+    ($($arg:tt)*) => {
+        let _ = ($($arg)*);
+    };
 }
 
 /// A `u64` whose 24-bit ANSI color is determined by its value.
@@ -112,31 +115,6 @@ impl<'a> Beacon<'a> {
         let s = 50.0;
         let l = 70.0;
 
-        fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
-            let h = h / 360.0;
-            let s = s / 100.0;
-            let l = l / 100.0;
-
-            let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-            let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
-            let m = l - c / 2.0;
-
-            let (r, g, b) = match (h * 6.0) as u8 {
-                0 | 6 => (c, x, 0.0),
-                1 => (x, c, 0.0),
-                2 => (0.0, c, x),
-                3 => (0.0, x, c),
-                4 => (x, 0.0, c),
-                _ => (c, 0.0, x),
-            };
-
-            (
-                ((r + m) * 255.0) as u8,
-                ((g + m) * 255.0) as u8,
-                ((b + m) * 255.0) as u8,
-            )
-        }
-
         let fg = hsl_to_rgb(h, s, l);
         let bg = hsl_to_rgb(h, s * 0.8, l * 0.5);
 
@@ -149,6 +127,32 @@ impl<'a> Beacon<'a> {
     }
 }
 
+/// Converts a hue, saturation, and lightness to an RGB color.
+pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let h = h / 360.0;
+    let s = s / 100.0;
+    let l = l / 100.0;
+
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+
+    let (r, g, b) = match (h * 6.0) as u8 {
+        0 | 6 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+
+    (
+        ((r + m) * 255.0) as u8,
+        ((g + m) * 255.0) as u8,
+        ((b + m) * 255.0) as u8,
+    )
+}
+
 impl<'a> std::fmt::Display for Beacon<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -156,5 +160,21 @@ impl<'a> std::fmt::Display for Beacon<'a> {
             "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{}#{:0x}\x1b[0m",
             self.bg.0, self.bg.1, self.bg.2, self.fg.0, self.fg.1, self.fg.2, self.name, self.val
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_beacon() {
+        let b = Beacon::new("test", 0x12345678);
+        println!("{b}");
+    }
+
+    #[test]
+    fn test_soprintln() {
+        soprintln!("test");
     }
 }

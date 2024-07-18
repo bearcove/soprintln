@@ -1,6 +1,6 @@
 [package]
 name = "soprintln"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["Amos Wenger <amos@bearcove.net>"]
 license = "MIT OR Apache-2.0"
@@ -11,3 +11,6 @@ categories = ["development-tools::debugging", "command-line-utilities"]
 keywords = ["logging", "debugging", "console", "println"]
 
 [dependencies]
+
+[features]
+print = []
