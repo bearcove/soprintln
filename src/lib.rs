@@ -57,7 +57,7 @@ macro_rules! soprintln {
                 let timestamp = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap().as_millis() % 99999;
 
                 // compute the 24-bit ANSI color of the timestamp based on its value between 0 and 99999
-                let hue = (timestamp % 10000) as f64 / 9999.0;
+                let hue = (timestamp % 1000) as f64 / 999.0 * 360.0;
                 let saturation = 50.0;
                 let lightness = 100.0;
                 let (fg_r, fg_g, fg_b) = $crate::hsl_to_rgb(hue, saturation, lightness);
@@ -111,21 +111,13 @@ impl<'a> Beacon<'a> {
 
     /// Creates a new `Beacon` with the given extra string and value.
     pub fn new(name: &'a str, u: u64) -> Self {
-        fn hash(mut x: u64) -> u64 {
-            const PRIME1: u64 = 11400714785074694791;
-            const PRIME2: u64 = 14029467366897019727;
-            const PRIME3: u64 = 1609587929392839161;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
-            x = x.wrapping_mul(PRIME1);
-            x = x.rotate_left(31);
-            x = x.wrapping_mul(PRIME2);
-            x ^= x >> 27;
-            x = x.wrapping_mul(PRIME3);
-            x ^= x >> 33;
-            x = x.wrapping_mul(PRIME1);
-            x ^= x >> 28;
-
-            x
+        fn hash(x: u64) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            x.hash(&mut hasher);
+            hasher.finish()
         }
 
         let hashed_float = (hash(u) as f64) / (u64::MAX as f64);
@@ -189,8 +181,13 @@ mod tests {
     fn test_beacon() {
         crate::init!();
         for i in 0..128 {
+            if i == 64 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(1));
             let b = Beacon::new("test", 0x12345678 + i);
-            println!("{b}");
+            soprintln!("{b}");
         }
     }
 
