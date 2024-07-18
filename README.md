@@ -4,8 +4,10 @@
 
 # soprintln
 
-This is only useful when implementing the `xgraph` dynamic linking model,
-see <https://github.com/bearcove/rubicon>
+(Note: This is only useful when implementing the `xgraph` dynamic linking model,
+see <https://github.com/bearcove/rubicon>)
+
+![](https://github.com/user-attachments/assets/3bc0e0e1-cade-4b27-88b5-5d73029a0e74)
 
 This crate provides the `soprintln!` macro, a debug variant of `println!` that:
 
