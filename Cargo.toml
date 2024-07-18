@@ -1,0 +1,13 @@
+[package]
+name = "soprintln"
+version = "1.0.0"
+edition = "2021"
+authors = ["Amos Wenger <amos@bearcove.net>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/bearcove/soprintln"
+description = "println wrapper that includes a timestamp, shared object ID and thread ID with useful colors"
+categories = ["development-tools::debugging", "command-line-utilities"]
+keywords = ["logging", "debugging", "console", "println"]
+
+[dependencies]
