@@ -17,7 +17,7 @@ macro_rules! init {
     () => {
         static INIT: std::sync::Once = std::sync::Once::new();
         INIT.call_once(|| unsafe {
-            $crate::SO_NAME = env!("CARGO_PKG_NAME");
+            $crate::SO_NAME = Box::leak(Box::new(format!("{: <12}", env!("CARGO_PKG_NAME"))));
         });
     };
 }
@@ -41,7 +41,7 @@ macro_rules! soprintln {
                 // this formatting is terribly wasteful — PRs welcome
 
                 let so_id = $crate::shared_object_id();
-                let so_mode_and_id = $crate::Beacon::new(unsafe { $crate::SO_NAME }, so_id);
+                let so_mode_and_id = $crate::Beacon::new(unsafe { $crate::SO_NAME }, so_id).show_val(false);
                 let curr_thread = std::thread::current();
                 let tid = format!("{:?}", curr_thread.id());
                 // strip `ThreadId(` prefix
@@ -52,13 +52,18 @@ macro_rules! soprintln {
                 let tid = tid.parse::<u64>().unwrap_or(0);
 
                 let thread_name = curr_thread.name().unwrap_or("<unnamed>").trim();
-                let thread = $crate::Beacon::new(thread_name, tid);
+                let thread_name = if thread_name.len() > 20 {
+                    format!("{}...{}", &thread_name[..8], &thread_name[thread_name.len() - 9..])
+                } else {
+                    format!("{: <20}", thread_name)
+                };
+                let thread = $crate::Beacon::new(&thread_name, tid);
 
                 let timestamp = ::std::time::SystemTime::now().duration_since(::std::time::UNIX_EPOCH).unwrap().as_millis() % 99999;
 
                 // compute the 24-bit ANSI color of the timestamp based on its value between 0 and 99999
                 let hue = (timestamp % 1000) as f64 / 999.0 * 360.0;
-                let saturation = 50.0;
+                let saturation = 40.0;
                 let lightness = 100.0;
                 let (fg_r, fg_g, fg_b) = $crate::hsl_to_rgb(hue, saturation, lightness);
                 let (bg_r, bg_g, bg_b) = $crate::hsl_to_rgb(hue, saturation * 0.8, lightness * 0.5);
@@ -68,7 +73,7 @@ macro_rules! soprintln {
                 // FIXME: this is probably not necessary, but without it, rustc complains about
                 // capturing variables in format_args?
                 let msg = format!($($arg)*);
-                eprintln!("\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{:05}\x1b[0m {so_mode_and_id} {thread} {msg}", bg_r, bg_g, bg_b, fg_r, fg_g, fg_b, timestamp);
+                eprintln!("⏰\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{:05}\x1b[0m 📦{so_mode_and_id} 🧵{thread} {msg}", bg_r, bg_g, bg_b, fg_r, fg_g, fg_b, timestamp);
             }
         }
     };
@@ -96,6 +101,7 @@ pub struct Beacon<'a> {
     bg: (u8, u8, u8),
     name: &'a str,
     val: u64,
+    show_val: bool,
 }
 
 impl<'a> Beacon<'a> {
@@ -122,8 +128,8 @@ impl<'a> Beacon<'a> {
 
         let hashed_float = (hash(u) as f64) / (u64::MAX as f64);
         let h = hashed_float * 360.0;
-        let s = 50.0;
-        let l = 90.0;
+        let s = 37.0;
+        let l = 91.0;
 
         let fg = hsl_to_rgb(h, s, l);
         let bg = hsl_to_rgb(h, s * 0.8, l * 0.6);
@@ -133,11 +139,21 @@ impl<'a> Beacon<'a> {
             bg,
             name,
             val: u,
+            show_val: true,
         }
+    }
+
+    pub fn show_val(mut self, show_val: bool) -> Self {
+        self.show_val = show_val;
+        self
     }
 }
 
 /// Converts a hue, saturation, and lightness to an RGB color.
+///
+/// h is in [0, 360)
+/// s is in [0, 100]
+/// l is in [0, 100]
 pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     let h = h / 360.0;
     let s = s / 100.0;
@@ -165,11 +181,26 @@ pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 
 impl<'a> std::fmt::Display for Beacon<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{}#{:0x}\x1b[0m",
-            self.bg.0, self.bg.1, self.bg.2, self.fg.0, self.fg.1, self.fg.2, self.name, self.val
-        )
+        if self.show_val {
+            write!(
+                f,
+                "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{}·{:03x}\x1b[0m",
+                self.bg.0,
+                self.bg.1,
+                self.bg.2,
+                self.fg.0,
+                self.fg.1,
+                self.fg.2,
+                self.name,
+                self.val
+            )
+        } else {
+            write!(
+                f,
+                "\x1b[48;2;{};{};{}m\x1b[38;2;{};{};{}m{}\x1b[0m",
+                self.bg.0, self.bg.1, self.bg.2, self.fg.0, self.fg.1, self.fg.2, self.name
+            )
+        }
     }
 }
 
