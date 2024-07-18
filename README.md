@@ -1,3 +1,7 @@
+[![license: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
+[![crates.io](https://img.shields.io/crates/v/soprintln.svg)](https://crates.io/crates/soprintln)
+[![docs.rs](https://docs.rs/soprintln/badge.svg)](https://docs.rs/soprintln)
+
 # soprintln
 
 This is only useful when implementing the `xgraph` dynamic linking model,
