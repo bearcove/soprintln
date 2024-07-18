@@ -9,7 +9,18 @@ pub fn shared_object_id() -> u64 {
 }
 
 /// The name of this package
-pub static PKG_NAME: &str = env!("CARGO_PKG_NAME");
+pub static mut SO_NAME: &str = "<unknown>";
+
+/// Initializes the `SO_NAME` static to make logs more readable.
+#[macro_export]
+macro_rules! init {
+    () => {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| unsafe {
+            SO_NAME = env!("CARGO_PKG_NAME");
+        });
+    };
+}
 
 /// Prints a message, prefixed with a cycling millisecond timestamp (wraps at 99999),
 /// a colorized shared object id, a colorized thread name+id, and the given message.
@@ -30,7 +41,7 @@ macro_rules! soprintln {
                 // this formatting is terribly wasteful — PRs welcome
 
                 let so_id = $crate::shared_object_id();
-                let so_mode_and_id = $crate::Beacon::new($crate::PKG_NAME.trim(), so_id);
+                let so_mode_and_id = $crate::Beacon::new(unsafe { $crate::SO_NAME }, so_id);
                 let curr_thread = std::thread::current();
                 let tid = format!("{:?}", curr_thread.id());
                 // strip `ThreadId(` prefix
@@ -48,7 +59,7 @@ macro_rules! soprintln {
                 // compute the 24-bit ANSI color of the timestamp based on its value between 0 and 99999
                 let hue = (timestamp % 10000) as f64 / 9999.0;
                 let saturation = 50.0;
-                let lightness = 70.0;
+                let lightness = 100.0;
                 let (fg_r, fg_g, fg_b) = $crate::hsl_to_rgb(hue, saturation, lightness);
                 let (bg_r, bg_g, bg_b) = $crate::hsl_to_rgb(hue, saturation * 0.8, lightness * 0.5);
 
@@ -113,10 +124,10 @@ impl<'a> Beacon<'a> {
         let hashed_float = (hash(u) as f64) / (u64::MAX as f64);
         let h = hashed_float * 360.0;
         let s = 50.0;
-        let l = 70.0;
+        let l = 90.0;
 
         let fg = hsl_to_rgb(h, s, l);
-        let bg = hsl_to_rgb(h, s * 0.8, l * 0.5);
+        let bg = hsl_to_rgb(h, s * 0.8, l * 0.6);
 
         Self {
             fg,
@@ -169,12 +180,14 @@ mod tests {
 
     #[test]
     fn test_beacon() {
+        crate::init!();
         let b = Beacon::new("test", 0x12345678);
         println!("{b}");
     }
 
     #[test]
     fn test_soprintln() {
+        crate::init!();
         soprintln!("test");
     }
 }
